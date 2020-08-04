@@ -3,7 +3,7 @@ import os
 import shutil
 import platform
 import time
-
+import file
 
 def get_config():
     config = configparser.ConfigParser()
@@ -34,7 +34,7 @@ def set_working_directory(path):
     with open('config.ini', 'w') as configfile:
         config.write(configfile)
         
-def get_files_names():
+def get_file_names():
     files = os.listdir(get_working_directory())
     
     if len(files) == 0:
@@ -57,3 +57,12 @@ def newest_file(filepath1, filepath2):
     else:
         return filepath2
     
+def scan():
+    list = []
+    names = get_file_names()
+    for name in names:
+        path = get_filepath(name)
+        mod = get_mod_time(path)
+        list.append(file.File(name, path, mod)  )   
+    return list
+        
