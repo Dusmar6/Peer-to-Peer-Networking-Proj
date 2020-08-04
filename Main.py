@@ -109,9 +109,9 @@ def connected():
             break
 
 
-def check():
-    if not os.path.isdir(f.get_working_directory()):
-        os.mkdir(f.get_working_directory())
+# def check():
+#     if not os.path.isdir(f.get_working_directory()):
+#         os.mkdir(f.get_working_directory())
 
 
 def validate_connection():
