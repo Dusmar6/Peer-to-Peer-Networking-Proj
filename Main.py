@@ -109,9 +109,13 @@ def connected():
             break
 
 
-# def check():
-#     if not os.path.isdir(f.get_working_directory()):
-#         os.mkdir(f.get_working_directory())
+def check():
+    if not os.path.isdir(f.get_working_directory()):
+        os.mkdir(f.get_working_directory())
+    if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share')):
+        os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share'))
+    if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp')):
+        os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp'))
 
 
 def validate_connection():
