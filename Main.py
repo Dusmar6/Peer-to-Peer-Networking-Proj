@@ -47,7 +47,7 @@ def connected():
     column1 = [
         [
             sg.Text("Folder to Sync To"),
-            sg.In(size = (25, 1), enable_events=True, key="-FOLDER-"),
+            sg.In(size=(25, 1), enable_events=True, key="-FOLDER-"),
             sg.FolderBrowse(),
         ],
         [
