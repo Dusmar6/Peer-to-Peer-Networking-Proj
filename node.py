@@ -23,6 +23,7 @@ class node():
         self.fp = filepath
 
         # Set Control Characters for process, message and transmission
+        # I know this isn't the proper way to do it, but it works
         self.IDENTIFIER = "P01"
         self.FILEPATH = "P02"
         self.FILELIST = "P03"
@@ -59,7 +60,7 @@ class node():
     def get_file_list(self):
         return [f for f in listdir(self.fp) if isfile(join(self.fp, f))]
 
-def mainNode(name, n):
+def server_node(name, n):
     s = socket.socket()
     s.bind((n.host, n.port))
     s.listen(5)
@@ -78,25 +79,27 @@ def mainNode(name, n):
         t.start()
 
 
-def childNode(n):
+def client_node(n):
     s = socket.socket()
     s.connect((n.host, n.port))
-    identity = n.IDENTIFIER + n.id + n.ETX + n.name
+    identity = n.IDENTIFIER + n.id + n.ETX + n.name + n.EOT
     s.send(identity.encode('utf-8'))
     print("Connected to the network!")
 
     while n.nodeOpen:
 
-        printMenu()
+        print_menu()
         inp = input("")
         if inp == 'y':
             n.nodeOpen = False
         if inp == '1':
-            print(' '.join(n.get_file_list()))
+            print("CWD has following inside:")
+            for f in n.get_file_list():
+                print("  " + f)
         if inp == '2':
            print(n.fp)
         if inp == '3':
-            n.fp = n.fp + "\\Test"
+            n.fp = n.fp + "\\share"
         if inp == '4':
             message = n.FILEPATH + n.fp + n.EOT
             print("Sending: " + message)
@@ -106,20 +109,22 @@ def childNode(n):
             print("Sending: " + message)
             s.send(message.encode('utf-8'))
         if inp == '6':
-            truepath = n.fp + "\\Test\\senior 1.jpg"
-            fsize = os.path.getsize(truepath)
-            message = n.FILEDATA + str(fsize) + n.EOT
-            print("Sending: " + message)
-            s.send(message.encode('utf-8'))
-            with open(truepath, 'rb') as f:
-                bytessent = 0
-                while bytessent < fsize:
-                    data = f.read(BUFFER_SIZE)
-                    s.send(data)
-                    bytessent += len(data)
+            n.fp = n.fp + "\\share"
+            for f in n.get_file_list():
+                truepath = n.fp + "\\" + f
+                fsize = os.path.getsize(truepath)
+                message = n.FILEDATA + f + n.ETX + str(fsize) + n.EOT
+                print("Sending: " + message)
+                s.send(message.encode('utf-8'))
+                with open(truepath, 'rb') as f:
+                    bytessent = 0
+                    while bytessent < fsize:
+                        data = f.read(BUFFER_SIZE)
+                        s.send(data)
+                        bytessent += len(data)
 
-            f.close()
-            print("Sent Successfully!")
+                f.close()
+                print("Sent Successfully!")
 
 
 def new_connection(name, n, sock):
@@ -137,9 +142,10 @@ def new_connection(name, n, sock):
             fl = data[n.CCLEN:data.find(n.EOT)]
             print(fl)
         if data[:n.CCLEN] == n.FILEDATA:
-            fsize = int(data[n.CCLEN:data.find(n.EOT)])
-            print("Receiving file of size: %d " %(fsize))
-            truepath = n.fp + "\\Test File.jpg"
+            fsize = int(data[data.find(n.ETX) + len(n.ETX):data.find(n.EOT)])
+            fname = data[n.CCLEN:data.find(n.ETX)]
+            print("Receiving file named: %s and of size: %d " % (fname, fsize))
+            truepath = n.fp + "\\" + fname
             f = open(truepath, 'wb')
             bytesrecv = 0
             while bytesrecv < fsize:
@@ -150,7 +156,7 @@ def new_connection(name, n, sock):
 
 
 
-def printMenu():
+def print_menu():
     print("What would you like to do?")
     time.sleep(0.1)
     print("1 --> See contents of your folders")
@@ -173,9 +179,9 @@ def main():
 
     while n.nodeOpen:
         try:
-            childNode(n)
+            client_node(n)
         except Exception:
-            mainNode(name, n)
+            server_node(name, n)
 
 
 
