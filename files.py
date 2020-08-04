@@ -1,6 +1,8 @@
 import configparser
 import os
 import shutil
+import platform
+import time
 
 
 def get_config():
@@ -43,3 +45,15 @@ def get_files_names():
 def get_filepath(name):
     return os.path.join(get_working_directory(), name)
 
+def get_mod_time(filepath):
+    fileStatsObj = os.stat ( filepath )
+    return fileStatsObj.st_mtime
+    
+def newest_file(filepath1, filepath2):
+    time1 = get_mod_time(filepath1)
+    time2 = get_mod_time(filepath2)
+    if time1>=time2:
+        return filepath1
+    else:
+        return filepath2
+    
