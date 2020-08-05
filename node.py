@@ -47,7 +47,7 @@ class node():
         self.MAS = "MAS" #send MAS + masterlist
 
 
-        self.CCLEN = len(self.IDENTIFIER)
+        self.CCLEN = len(self.DEL)
         
         # Keep track of nodes connected to us
         self.connectedNodes = []
@@ -78,7 +78,7 @@ def server_node(name, n):
     t = threading.Thread(target=accept, args=(s, n))
     t.start()
     
-    k = threading.Thread(target=host_scan, args=(n))
+    k = threading.Thread(target=host_scan, args=(s, n))
     k.start()
     
     while True:
@@ -172,13 +172,16 @@ def host_add_file(path, node):
             f.close()
             print("Sent Successfully!")
 
+def host_add_request(sock, fsize, fname):
+    print("host_add_request")
+
 
 def host_send_masterlist():
     global masterlist
     global sock_list
     print('send masterlist')
     
-def host_scan(node):
+def host_scan(sock, node):
     global masterlist
 
     while True:
@@ -194,6 +197,7 @@ def host_scan(node):
                             host_update_file(n.path)
 
             else:
+                print("File name: %s\nPath: %s\nMod: %d" %(n.name, n.path, n.mod))
                 host_add_file(n.path, node)
                 #master is missing a file
                 #send file to all
@@ -225,7 +229,7 @@ def new_connection(name, n, sock):
         if data[:n.CCLEN] == n.UPD:
             fsize = int(data[data.find(n.ETX) + len(n.ETX):data.find(n.EOT)])
             fname = data[n.CCLEN:data.find(n.ETX)]
-            host_add_request()
+            host_add_request(sock, fsize, fname)
 
 
         if data[:n.CCLEN] == n.IDENTIFIER:
@@ -262,12 +266,13 @@ def client_node(n):
     s.send(identity.encode('utf-8'))
     print("Connected to the network!")
     
-    t = threading.Thread(target=client_listen, args=(s))
+    t = threading.Thread(target=client_listen, args=("client_listener", s))
     t.start()
-    
+
+    host_menu()
+
     while n.nodeOpen:
 
-        print_menu()
         inp = input("")
         if inp == 'y':
             n.nodeOpen = False
@@ -306,7 +311,7 @@ def client_node(n):
                 print("Sent Successfully!")
                 
                 
-def client_listen(s):
+def client_listen(name, s):
     
     ##client listening for the host
     ##each client can recv one of the following from the host
@@ -314,9 +319,9 @@ def client_listen(s):
         
         data = s.recv(BUFFER_SIZE).decode('utf-8')
         
-        if data[:CCLEN] == node.MAS: # if the message is just the masterlist, pass it to client
+        if data[:node.CCLEN] == node.MAS: # if the message is just the masterlist, pass it to client
             client_scan(masterlist, s)
-        if False: # if the message is a new file to add - download to the share folder
+        if data[:node.CCLEN] == node.ADD: # if the message is a new file to add - download to the share folder
              print("todo")
         if False: # if the message is an updated file - overwrite the local file with the same name
             print("todo")

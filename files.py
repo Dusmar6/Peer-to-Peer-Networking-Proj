@@ -63,6 +63,6 @@ def scan():
     for name in names:
         path = get_filepath(name)
         mod = get_mod_time(path)
-        list.append(file.File(name, path, mod)  )   
+        list.append(file.File(name, mod, path))
     return list
         
