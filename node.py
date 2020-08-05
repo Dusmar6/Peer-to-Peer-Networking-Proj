@@ -126,8 +126,23 @@ def host_delete_file():
 
 def host_update_file(path):
     global masterlist
-    
-    
+    global sock_list
+
+    for sock in sock_list:
+        truepath = path
+        fsize = os.path.getsize(truepath)
+        message = node.ADD + truepath + node.ETX + str(fsize) + node.EOT
+        print("Sending: " + message)
+        sock.send(message.encode('utf-8'))
+        with open(truepath, 'rb') as f:
+            bytessent = 0
+            while bytessent < fsize:
+                data = f.read(BUFFER_SIZE)
+                sock.send(data)
+                bytessent += len(data)
+
+            f.close()
+            print("Sent Successfully!")
     print("todo: update master list, send file to everyone, tell them to overwrite the file of the same name")
 
 def masterlist_as_json():
@@ -140,18 +155,18 @@ def masterlist_as_json():
 def host_add_file(path, node):
     global masterlist
     global sock_list
-    
+
     for sock in sock_list:
         truepath = path
         fsize = os.path.getsize(truepath)
-        message = node.ADD + truepath + n.ETX + str(fsize) + n.EOT
+        message = node.ADD + truepath + node.ETX + str(fsize) + node.EOT
         print("Sending: " + message)
-        s.send(message.encode('utf-8'))
+        sock.send(message.encode('utf-8'))
         with open(truepath, 'rb') as f:
             bytessent = 0
             while bytessent < fsize:
                 data = f.read(BUFFER_SIZE)
-                s.send(data)
+                sock.send(data)
                 bytessent += len(data)
 
             f.close()
@@ -165,7 +180,7 @@ def host_send_masterlist():
     
 def host_scan(node):
     global masterlist
-    
+
     while True:
         host_send_masterlist()
         time.sleep(1)
@@ -177,7 +192,7 @@ def host_scan(node):
                     if m.name == n.name:
                         if m.mod < n.mod:
                             host_update_file(n.path)
-                    
+
             else:
                 host_add_file(n.path, node)
                 #master is missing a file
@@ -207,7 +222,10 @@ def new_connection(name, n, sock):
         #update file - host overwrites the file locally, host updates the mod time on the masterlist, host sends the overwrite message w/ file to all nodes (not back to sender)
         #delete file - host deletes the file from the masterlist, host deletes the message locally, host sends message to all nodes to delete their file with this name
 
-        
+        if data[:n.CCLEN] == n.UPD:
+            fsize = int(data[data.find(n.ETX) + len(n.ETX):data.find(n.EOT)])
+            fname = data[n.CCLEN:data.find(n.ETX)]
+            host_add_request()
 
 
         if data[:n.CCLEN] == n.IDENTIFIER:
@@ -296,10 +314,8 @@ def client_listen(s):
         
         data = s.recv(BUFFER_SIZE).decode('utf-8')
         
-        if False: # if the message is just the masterlist, pass it to client 
-        
-            client_scan(masterlist)
-            
+        if data[:CCLEN] == node.MAS: # if the message is just the masterlist, pass it to client
+            client_scan(masterlist, s)
         if False: # if the message is a new file to add - download to the share folder
              print("todo")
         if False: # if the message is an updated file - overwrite the local file with the same name
@@ -307,7 +323,7 @@ def client_listen(s):
         if False: # if the message is a delete request - delete the file with that name
             print("todo")
     
-def client_scan(masterlist):
+def client_scan(masterlist, s):
     files = f.scan()
     
     for c in files:
@@ -319,11 +335,11 @@ def client_scan(masterlist):
             for m in masterlist:
                 if m.name == n.name:
                     if m.mod < n.mod:
-                        client_update_file(n.path)
+                        client_update_file(n.path, s)
                         #local has updated file, master is out of date
                         #send file.path
         else:
-            client_add_file(n.path)
+            client_add_file(n.path, s)
             #master is missing a file
             #send file to all
 
