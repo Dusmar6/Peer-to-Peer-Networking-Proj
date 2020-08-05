@@ -11,6 +11,7 @@ from os.path import isfile, join
 import file
 import files as f
 import PySimpleGUI as sg
+import json
 
 HOST = '127.0.0.1'
 PORT = 8000
@@ -77,7 +78,7 @@ def server_node(name, n):
     t = threading.Thread(target=accept, args=(s, n))
     t.start()
     
-    k = threading.Thread(target=host_scan, args=())
+    k = threading.Thread(target=host_scan, args=(n))
     k.start()
     
     while True:
@@ -131,20 +132,38 @@ def host_update_file(path):
 
 def masterlist_as_json():
     global masterlist
-    return 
+    j = {"masterlist": []}
+    for file in masterlist:
+        j["masterlist"].append({"name": file.name, "mod": file.mod,  "path": file.path})
+    return json.dumps(j)
   
-def host_add_file():
+def host_add_file(path, node):
     global masterlist
     global sock_list
+    
     for sock in sock_list:
-        print("todo add file to masterlist.  send file to everyone in this socket list")
+        truepath = path
+        fsize = os.path.getsize(truepath)
+        message = node.ADD + truepath + n.ETX + str(fsize) + n.EOT
+        print("Sending: " + message)
+        s.send(message.encode('utf-8'))
+        with open(truepath, 'rb') as f:
+            bytessent = 0
+            while bytessent < fsize:
+                data = f.read(BUFFER_SIZE)
+                s.send(data)
+                bytessent += len(data)
+
+            f.close()
+            print("Sent Successfully!")
 
 
 def host_send_masterlist():
     global masterlist
+    global sock_list
     print('send masterlist')
     
-def host_scan():
+def host_scan(node):
     global masterlist
     
     while True:
@@ -160,7 +179,7 @@ def host_scan():
                             host_update_file(n.path)
                     
             else:
-                host_add_file(n.path)
+                host_add_file(n.path, node)
                 #master is missing a file
                 #send file to all
     
@@ -349,23 +368,7 @@ def check():
         os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share'))
     if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp')):
         os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp'))
-        
-def print_menu():
-    print("What would you like to do?")
-    time.sleep(0.1)
-    print("1 --> See contents of your folders")
-    time.sleep(0.1)
-    print("2 --> See file path")
-    time.sleep(0.1)
-    print("3 --> Set file path")
-    time.sleep(0.1)
-    print("4 --> Send your file path")
-    time.sleep(0.1)
-    print("5 --> Send file names in your file path")
-    time.sleep(0.1)
-    print("Enter y or Y to quit")
-
-
+         
 def main():
     check()
     name = "User: " + str(uuid.uuid4())
