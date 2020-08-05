@@ -20,6 +20,14 @@ BUFFER_SIZE = 1024
 sock_list = []
 masterlist = []
 
+STX = "T02"
+ETX = "T03"
+EOT = "T04"
+DEL = "DEL"  # send del + file name
+ADD = "ADD"  # send add + file name + filesize + file data
+UPD = "UPD"  # send udp + file name + filesize + file data (overwrite the file with this name)
+MAS = "MAS"  # send MAS + masterlist
+
 class node():
 
     def __init__(self, name,myport, host, port, filepath=os.getcwd()):
@@ -201,16 +209,23 @@ def host_add_request(sock, fsize, fname):
     print("host_add_request")
 
 
-def host_send_masterlist():
+def host_send_masterlist(sock):
     global masterlist
     global sock_list
-    for file in masterlist:
-        print(file.name)
+    command = "MAS"
+    sock.send(command.encode('utf-8'))
+    time.sleep(0.1)
+    resp = sock.recv(BUFFER_SIZE).decode('utf-8')
+    if resp == "OK":
+        ml = masterlist_as_json() + EOT
+        sock.send(ml.encode('utf-8'))
+    else:
+        print("Didn't send Master List")
     # print('send masterlist')
 
 def host_scan(sock, node):
     global masterlist
-    host_send_masterlist()
+    host_send_masterlist(sock)
     files = f.scan()
     for n in files:
         if any(fol.name == n.name for fol in masterlist):
@@ -223,7 +238,7 @@ def host_scan(sock, node):
         else:
             host_add_file(n.path, n.name, node)
             masterlist.append(n)
-        time.sleep(0.1)
+        time.sleep(0.1) # TODO not sure why, but the program doesn't work when this is not here
             #master is missing a file
             #send file to all
 
@@ -353,7 +368,7 @@ def client_listen(name, s, node):
 
         # TODO fix CCLEN and other identifier issues
         if data[:3] == "MAS":  # if the message is just the masterlist, pass it to client
-            client_scan(masterlist, s)
+            client_scan(data, s)
         if data[:3] == "ADD":  # if the message is a new file to add - download to the share folder
             client_download_file(s, node, data)
         if False:  # if the message is an updated file - overwrite the local file with the same name
@@ -362,12 +377,24 @@ def client_listen(name, s, node):
             print("todo")
 
 
-def client_scan(masterlist, s):
+def client_scan(masterlst, s):
+    global masterlist
+    s.send("OK".encode('utf-8'))
+
     files = f.scan()
+    print("in client_scan")
 
-    for c in files:
-        print(str(c))
+    data = ''
+    message = "GO!"
+    while message != EOT:
+        message = s.recv(BUFFER_SIZE).decode('utf-8')
+        data += message
+        message = message[len(message)-len(EOT):]
 
+    print(data)
+    # mastlist = json.loads(data)
+
+    # TODO Need to rethink how this works. Need to add just received master list to this client's master list
     for n in files:
         if any(fol.name == n.name for fol in masterlist):
             # master has the file
@@ -432,9 +459,8 @@ def client_download_file(s, node, data):
         s.send("NO".encode('utf-8'))
 
 
-def client_add_file(s, data):
+def client_add_file(path,name,node):
     print("send file to host")
-
 
 #############################################################################
 
