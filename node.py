@@ -222,6 +222,7 @@ def host_scan(sock, node):
 
         else:
             host_add_file(n.path, n.name, node)
+            masterlist.append(n)
         time.sleep(0.1)
             #master is missing a file
             #send file to all
@@ -249,7 +250,7 @@ def new_connection(name, n, sock):
 
         data = "Waiting for Direction" #sock.recv(BUFFER_SIZE).decode('utf-8')
         print(data)
-        time.sleep(1)
+        time.sleep(5)
         #TODO
         #each client can send one of the following to the host
         #new file - host downloads the file, host adds it to the masterlist, host sends the file to all other nodes (not back to the sender tho)
