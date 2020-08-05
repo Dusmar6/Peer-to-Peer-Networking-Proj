@@ -85,8 +85,12 @@ def check():
 def validate_connection():
     # TODO connect to network
     print('todo')
-    #need to ass host logic
-    return True
+    #need to ass host logic'
+    #if host, return 1
+    #if node return 2
+    #if cant connect, return 0
+    
+    return 1
 
 def scan():
     files = f.scan()

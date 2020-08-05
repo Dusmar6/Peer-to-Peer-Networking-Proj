@@ -8,11 +8,16 @@ import uuid
 import os
 from os import listdir
 from os.path import isfile, join
+import file
+import files as f
+import PySimpleGUI as sg
 
 HOST = '127.0.0.1'
 PORT = 8000
 BUFFER_SIZE = 1024
 
+sock_list = []
+masterlist = []
 
 class node():
 
@@ -35,6 +40,10 @@ class node():
         self.STX = "T02"
         self.ETX = "T03"
         self.EOT = "T04"
+        self.DEL = "DEL" #send del + file name
+        self.ADD = "ADD" #send add + file name + filesize + file data
+        self.UPD = "UPD" #send udp + file name + filesize + file data (overwrite the file with this name)
+        self.MAS = "MAS" #send MAS + masterlist
 
 
         self.CCLEN = len(self.IDENTIFIER)
@@ -64,19 +73,149 @@ def server_node(name, n):
     s = socket.socket()
     s.bind((n.host, n.port))
     s.listen(5)
+    
+    t = threading.Thread(target=accept, args=(s, n))
+    t.start()
+    
+    k = threading.Thread(target=host_scan, args=())
+    k.start()
+    
+    while True:
+        host_menu()
+        inp = int(input())
+        
+        if inp == 1:
+            host_delete_file()
+        elif inp == 2:
+            try:
+                os.startfile(os.path.dirname(os.path.realpath(__file__)), 'share')
+            except:
+                check()
+        elif inp == 3:
+            for sock in sock_list:
+                sock.close()
+            
+def host_menu():
+    print("1: Delete File.\n2: Open Folder\n3: Disconnect")
+    
+def host_delete_file():
+    sg.theme('Default1')
+    layout = [
+         [sg.Listbox(f.get_file_names(), size=(50, 10), key='list')],
+          sg.Button('Delete File')
+    ]
+    hel = sg.Window('Pee2pee', layout)
+    while True:
+        event, values = hel.read()
+        if event is None:
+            break
+        if event =='Delete File':
+            filename = values['list'][0]
+            print("Deleting", filename)
+            if filename != '' and filename != None:
+                try:
+                    os.remove(f.get_filepath(filename)) #removes it locally
+                    for file in masterlist:
+                        if file.name == filename:
+                            masterlist.remove(file)
+                            print("todo: send out message to delete the file with this name")
+                    #send message to everyone to delete the file
+                except:
+                    print("File could not be deleted.")
 
-    print("No connections found. Starting service.")
-    time.sleep(0.1)
-    print("Service Started...")
-    time.sleep(0.1)
-    print("Service listening")
+def host_update_file(path):
+    global masterlist
+    
+    
+    print("todo: update master list, send file to everyone, tell them to overwrite the file of the same name")
 
+def masterlist_as_json():
+    global masterlist
+    return 
+  
+def host_add_file():
+    global masterlist
+    global sock_list
+    for sock in sock_list:
+        print("todo add file to masterlist.  send file to everyone in this socket list")
+
+
+def host_send_masterlist():
+    global masterlist
+    print('send masterlist')
+    
+def host_scan():
+    global masterlist
+    
+    while True:
+        host_send_masterlist()
+        time.sleep(1)
+        files = f.scan()
+        for n in files:
+            if any(fol.name == n.name for fol in masterlist):
+                #master has the file
+                for m in masterlist:
+                    if m.name == n.name:
+                        if m.mod < n.mod:
+                            host_update_file(n.path)
+                    
+            else:
+                host_add_file(n.path)
+                #master is missing a file
+                #send file to all
+    
+def accept(s, n):
+    print("Waiting to accept")
     while n.nodeOpen:
 
         conn, addr = s.accept()
 
         t = threading.Thread(target=new_connection, args=(str(addr[0]), n, conn))
         t.start()
+    
+def new_connection(name, n, sock):
+    global sock_list
+    
+    sock_list.append(sock)
+    
+    while True:
+        
+        
+        data = sock.recv(BUFFER_SIZE).decode('utf-8')
+        #TODO
+        #each client can send one of the following to the host
+        #new file - host downloads the file, host adds it to the masterlist, host sends the file to all other nodes (not back to the sender tho)
+        #update file - host overwrites the file locally, host updates the mod time on the masterlist, host sends the overwrite message w/ file to all nodes (not back to sender)
+        #delete file - host deletes the file from the masterlist, host deletes the message locally, host sends message to all nodes to delete their file with this name
+
+        
+
+
+        if data[:n.CCLEN] == n.IDENTIFIER:
+            cID = data[n.CCLEN:data.find(n.ETX)]
+            cName = data[data.find(n.ETX) + len(n.ETX):]
+            print("Client connected!\nUsername: %s\nID: %s" % (cName, cID))
+        if data[:n.CCLEN] == n.FILEPATH:
+            fp = data[n.CCLEN:data.find(n.EOT)]
+            print(fp)
+        if data[:n.CCLEN] == n.FILELIST:
+            fl = data[n.CCLEN:data.find(n.EOT)]
+            print(fl)
+        if data[:n.CCLEN] == n.FILEDATA:
+            fsize = int(data[data.find(n.ETX) + len(n.ETX):data.find(n.EOT)])
+            fname = data[n.CCLEN:data.find(n.ETX)]
+            print("Receiving file named: %s and of size: %d " % (fname, fsize))
+            truepath = n.fp + "\\" + fname
+            f = open(truepath, 'wb')
+            bytesrecv = 0
+            while bytesrecv < fsize:
+                newdata = sock.recv(BUFFER_SIZE)
+                bytesrecv += len(newdata)
+                f.write(newdata)
+            print("File received!")
+
+
+################################################################################
 
 
 def client_node(n):
@@ -85,7 +224,10 @@ def client_node(n):
     identity = n.IDENTIFIER + n.id + n.ETX + n.name + n.EOT
     s.send(identity.encode('utf-8'))
     print("Connected to the network!")
-
+    
+    t = threading.Thread(target=client_listen, args=(s))
+    t.start()
+    
     while n.nodeOpen:
 
         print_menu()
@@ -125,37 +267,89 @@ def client_node(n):
 
                 f.close()
                 print("Sent Successfully!")
-
-
-def new_connection(name, n, sock):
+                
+                
+def client_listen(s):
+    
+    ##client listening for the host
+    ##each client can recv one of the following from the host
     while True:
-        data = sock.recv(BUFFER_SIZE).decode('utf-8')
+        
+        data = s.recv(BUFFER_SIZE).decode('utf-8')
+        
+        if False: # if the message is just the masterlist, pass it to client 
+        
+            client_scan(masterlist)
+            
+        if False: # if the message is a new file to add - download to the share folder
+             print("todo")
+        if False: # if the message is an updated file - overwrite the local file with the same name
+            print("todo")
+        if False: # if the message is a delete request - delete the file with that name
+            print("todo")
+    
+def client_scan(masterlist):
+    files = f.scan()
+    
+    for c in files:
+        print(str(c))
 
-        if data[:n.CCLEN] == n.IDENTIFIER:
-            cID = data[n.CCLEN:data.find(n.ETX)]
-            cName = data[data.find(n.ETX) + len(n.ETX):]
-            print("Client connected!\nUsername: %s\nID: %s" % (cName, cID))
-        if data[:n.CCLEN] == n.FILEPATH:
-            fp = data[n.CCLEN:data.find(n.EOT)]
-            print(fp)
-        if data[:n.CCLEN] == n.FILELIST:
-            fl = data[n.CCLEN:data.find(n.EOT)]
-            print(fl)
-        if data[:n.CCLEN] == n.FILEDATA:
-            fsize = int(data[data.find(n.ETX) + len(n.ETX):data.find(n.EOT)])
-            fname = data[n.CCLEN:data.find(n.ETX)]
-            print("Receiving file named: %s and of size: %d " % (fname, fsize))
-            truepath = n.fp + "\\" + fname
-            f = open(truepath, 'wb')
-            bytesrecv = 0
-            while bytesrecv < fsize:
-                newdata = sock.recv(BUFFER_SIZE)
-                bytesrecv += len(newdata)
-                f.write(newdata)
-            print("File received!")
+    for n in files:
+        if any(fol.name == n.name for fol in masterlist):
+            #master has the file
+            for m in masterlist:
+                if m.name == n.name:
+                    if m.mod < n.mod:
+                        client_update_file(n.path)
+                        #local has updated file, master is out of date
+                        #send file.path
+        else:
+            client_add_file(n.path)
+            #master is missing a file
+            #send file to all
 
 
+def client_delete_file():
+    sg.theme('Default1')
+    layout = [
+         [sg.Listbox(f.get_file_names(), size=(50, 10), key='list')],
+          sg.Button('Delete File')
+    ]
+    hel = sg.Window('Pee2pee', layout)
+    while True:
+        event, values = hel.read()
+        if event is None:
+            break
+        if event =='Delete File':
+            filename = values['list'][0]
+            print("Deleting", filename)
+            if filename != '' and filename != None:
+                try:
+                    # Toto send message to the host to delete the file
+                    
+                    os.remove(f.get_filepath(filename)) #removes it locally
+                except:
+                    print("File could not be deleted.")
 
+def client_update_file(path):
+    print("todo: send update request to the host")
+
+
+def client_add_file(path):
+    print("send file to host")
+
+
+#############################################################################
+
+
+def check():
+    if not os.path.isdir(f.get_working_directory()):
+        os.mkdir(f.get_working_directory())
+    if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share')):
+        os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share'))
+    if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp')):
+        os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp'))
+        
 def print_menu():
     print("What would you like to do?")
     time.sleep(0.1)
@@ -173,7 +367,7 @@ def print_menu():
 
 
 def main():
-
+    check()
     name = "User: " + str(uuid.uuid4())
     n = node(name, HOST, PORT)
 
