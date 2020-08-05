@@ -14,19 +14,19 @@ class File:
 
 
 
-list = []
-
-list.append(File("test", 543543.234534, "testpath"))
-
-list.append(File("test", 543543.234534, "testpath"))
-
-list.append(File("test", 543543.234534, "testpath"))
-
-
-j = {"masterlist":[]}
-for file in list:
-    j["masterlist"].append({"name": file.name, "mod": file.mod,  "path": file.path})
-    
-
-print(j)
+# list = []
+#
+# list.append(File("test", 543543.234534, "testpath"))
+#
+# list.append(File("test", 543543.234534, "testpath"))
+#
+# list.append(File("test", 543543.234534, "testpath"))
+#
+#
+# j = {"masterlist":[]}
+# for file in list:
+#     j["masterlist"].append({"name": file.name, "mod": file.mod,  "path": file.path})
+#
+#
+# print(j)
     

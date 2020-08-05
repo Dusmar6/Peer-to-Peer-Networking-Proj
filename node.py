@@ -13,7 +13,7 @@ import files as f
 import PySimpleGUI as sg
 import json
 
-HOST = '127.0.0.1'
+HOST = '192.168.2.151'
 PORT = 8000
 BUFFER_SIZE = 1024
 
@@ -22,7 +22,9 @@ masterlist = []
 
 class node():
 
-    def __init__(self, name, host, port, filepath = os.getcwd()):
+    def __init__(self, name,myport, host, port, filepath=os.getcwd()):
+        self.myhost = self.get_my_ip()
+        self.myport = myport
         self.host = host
         self.port = port
         self.name = name
@@ -65,21 +67,30 @@ class node():
 
         # # Start the TCP/IP socket for this node
         # self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print("Node created!\nUsername: %s\nID: %s" % (self.name, self.id))
+        print("Node created!\nAddress: %s:%d\nUsername: %s" % (self.host, self.port, self.name))
 
     def get_file_list(self):
         return [f for f in listdir(self.fp) if isfile(join(self.fp, f))]
 
+    def get_my_ip(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect(("www.google.com", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+
 def server_node(name, n):
     s = socket.socket()
-    s.bind((n.host, n.port))
+    host = n.get_my_ip()
+    s.bind((host, n.port))
     s.listen(5)
+    print("Started Server at: (%s:%d)" % (host, n.port))
     
     t = threading.Thread(target=accept, args=(s, n))
     t.start()
     
-    k = threading.Thread(target=host_scan, args=(s, n))
-    k.start()
+    # k = threading.Thread(target=host_scan, args=(s, n))
+    # k.start()
     
     while True:
         host_menu()
@@ -124,14 +135,18 @@ def host_delete_file():
                 except:
                     print("File could not be deleted.")
 
-def host_update_file(path):
+def host_update_file(hostsock, path, name):
     global masterlist
     global sock_list
 
     for sock in sock_list:
+
+        #skip the client that uploaded the file
+        if sock == hostsock:
+            continue
         truepath = path
         fsize = os.path.getsize(truepath)
-        message = node.ADD + truepath + node.ETX + str(fsize) + node.EOT
+        message = node.ADD + name + node.ETX + str(fsize) + node.EOT
         print("Sending: " + message)
         sock.send(message.encode('utf-8'))
         with open(truepath, 'rb') as f:
@@ -152,25 +167,30 @@ def masterlist_as_json():
         j["masterlist"].append({"name": file.name, "mod": file.mod,  "path": file.path})
     return json.dumps(j)
   
-def host_add_file(path, node):
+def host_add_file(path, name, node):
     global masterlist
     global sock_list
 
     for sock in sock_list:
         truepath = path
         fsize = os.path.getsize(truepath)
-        message = node.ADD + truepath + node.ETX + str(fsize) + node.EOT
+        message = node.ADD + name + node.ETX + str(fsize) + node.EOT
         print("Sending: " + message)
         sock.send(message.encode('utf-8'))
-        with open(truepath, 'rb') as f:
-            bytessent = 0
-            while bytessent < fsize:
-                data = f.read(BUFFER_SIZE)
-                sock.send(data)
-                bytessent += len(data)
+        time.sleep(0.01)
+        resp = sock.recv(1024).decode('utf-8')
 
-            f.close()
-            print("Sent Successfully!")
+        # Only send the file if the client wants it
+        if resp == "OK":
+            with open(truepath, 'rb') as f:
+                bytessent = 0
+                while bytessent < fsize:
+                    data = f.read(BUFFER_SIZE)
+                    sock.send(data)
+                    bytessent += len(data)
+
+                f.close()
+                print("Sent Successfully!")
 
 def host_add_request(sock, fsize, fname):
     print("host_add_request")
@@ -179,34 +199,37 @@ def host_add_request(sock, fsize, fname):
 def host_send_masterlist():
     global masterlist
     global sock_list
-    print('send masterlist')
+    for file in masterlist:
+        print(file.name)
+    # print('send masterlist')
     
 def host_scan(sock, node):
     global masterlist
+    host_send_masterlist()
+    time.sleep(3)
+    files = f.scan()
+    for n in files:
+        if any(fol.name == n.name for fol in masterlist):
+            #master has the file
+            for m in masterlist:
+                if m.name == n.name:
+                    if m.mod < n.mod:
+                        host_update_file(sock, n.path, n.name)
 
-    while True:
-        host_send_masterlist()
-        time.sleep(1)
-        files = f.scan()
-        for n in files:
-            if any(fol.name == n.name for fol in masterlist):
-                #master has the file
-                for m in masterlist:
-                    if m.name == n.name:
-                        if m.mod < n.mod:
-                            host_update_file(n.path)
+        else:
+            host_add_file(n.path, n.name, node)
+            #master is missing a file
+            #send file to all
 
-            else:
-                print("File name: %s\nPath: %s\nMod: %d" %(n.name, n.path, n.mod))
-                host_add_file(n.path, node)
-                #master is missing a file
-                #send file to all
     
 def accept(s, n):
     print("Waiting to accept")
     while n.nodeOpen:
 
         conn, addr = s.accept()
+
+        resp = conn.recv(1024).decode('utf-8')
+        print("Connected with: %s" % resp)
 
         t = threading.Thread(target=new_connection, args=(str(addr[0]), n, conn))
         t.start()
@@ -217,8 +240,8 @@ def new_connection(name, n, sock):
     sock_list.append(sock)
     
     while True:
-        
-        
+        host_scan(sock, n)
+
         data = sock.recv(BUFFER_SIZE).decode('utf-8')
         #TODO
         #each client can send one of the following to the host
@@ -261,6 +284,7 @@ def new_connection(name, n, sock):
 
 def client_node(n):
     s = socket.socket()
+    s.settimeout(10)
     s.connect((n.host, n.port))
     identity = n.IDENTIFIER + n.id + n.ETX + n.name + n.EOT
     s.send(identity.encode('utf-8'))
@@ -393,7 +417,7 @@ def check():
 def main():
     check()
     name = "User: " + str(uuid.uuid4())
-    n = node(name, HOST, PORT)
+    n = node(name, 8000, HOST, PORT)
 
     while n.nodeOpen:
         try:
