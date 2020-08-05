@@ -28,7 +28,7 @@ class node():
         self.host = host
         self.port = port
         self.name = name
-        self.fp = filepath
+        self.fp = filepath + "/share/"
 
         # Set Control Characters for process, message and transmission
         # I know this isn't the proper way to do it, but it works
@@ -194,6 +194,8 @@ def host_add_file(path, name, node):
 
                 f.close()
                 print("Sent Successfully!")
+        else:
+            print("They don't want it...")
 
 def host_add_request(sock, fsize, fname):
     print("host_add_request")
