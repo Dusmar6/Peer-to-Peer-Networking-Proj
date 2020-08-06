@@ -1,5 +1,5 @@
 class File:
-    def __init__(self, name, mod, path='Master'):
+    def __init__(self, name, mod = 0, path='Master'):
         self.name = name
         self.path = path
         self.mod = mod

@@ -12,6 +12,7 @@ import file
 import files as f
 import PySimpleGUI as sg
 import json
+import shutil
 
 HOST = '192.168.2.151'
 PORT = 8000
@@ -99,76 +100,52 @@ def server_node(name, n):
 
     # k = threading.Thread(target=host_scan, args=(s, n))
     # k.start()
-
-    while n.nodeOpen:
-        host_menu()
-        inp = int(input())
-
-        if inp == 1:
-            host_delete_file()
-        elif inp == 2:
-            try:
-                os.startfile(os.path.dirname(os.path.realpath(__file__)), 'share')
-            except:
-                check()
-        elif inp == 3:
-            for sock in sock_list:
-                sock.close()
-            n.nodeOpen = False
-
-def host_menu():
-    print("1: Delete File.\n2: Open Folder\n3: Disconnect")
+    
+    
+    host_console(name, n)
 
 
-def host_delete_file(): # TODO Window throwing error when opening
-    sg.theme('Default1')
-    layout = [
-         [sg.Listbox(f.get_file_names(), size=(50, 10), key='list')],
-          sg.Button('Delete File')
-    ]
-    hel = sg.Window('Pee2pee', layout)
-    while True:
-        event, values = hel.read()
-        if event is None:
-            break
-        if event =='Delete File':
-            filename = values['list'][0]
-            print("Deleting", filename)
-            if filename != '' and filename != None:
-                try:
-                    os.remove(f.get_filepath(filename)) #removes it locally
-                    for file in masterlist:
-                        if file.name == filename:
-                            masterlist.remove(file)
-                            print("todo: send out message to delete the file with this name")
-                    #send message to everyone to delete the file
-                except:
-                    print("File could not be deleted.")
+def host_delete_file(filename): # TODO Window throwing error when opening
+
+    try:
+        os.remove(f.get_filepath(filename)) #removes it locally
+        for file in masterlist:
+            if file.name == filename:
+                masterlist.remove(file)
+        print("File removed")
+    except:
+        print("File could not be deleted. shouldnt be possible")
+    
+    for sock in sock_list:
+        message = node.DEL + filename 
+        print("Sending: " + message)
+        sock.send(message.encode('utf-8'))
+        time.sleep(0.01)    
+        print("Sent Successfully!")
+
+
 
 def host_update_file(hostsock, path, name):
     global masterlist
     global sock_list
 
-    # for sock in sock_list:
-    #
-    #     #skip the client that uploaded the file
-    #     if sock == hostsock:
-    #         continue
-    #     truepath = path
-    #     fsize = os.path.getsize(truepath)
-    #     message = node.ADD + name + node.ETX + str(fsize) + node.EOT
-    #     print("Sending: " + message)
-    #     sock.send(message.encode('utf-8'))
-    #     with open(truepath, 'rb') as f:
-    #         bytessent = 0
-    #         while bytessent < fsize:
-    #             data = f.read(BUFFER_SIZE)
-    #             sock.send(data)
-    #             bytessent += len(data)
-    #
-    #         f.close()
-    #         print("Sent Successfully!")
-    print("todo: update master list, send file to everyone, tell them to overwrite the file of the same name")
+    for sock in sock_list:
+        truepath = path
+        fsize = os.path.getsize(truepath)
+        message = node.UPD + name + node.ETX + str(fsize) + node.EOT
+        print("Sending: " + message)
+        sock.send(message.encode('utf-8'))
+        time.sleep(0.01)    
+        with open(truepath, 'rb') as f:
+            bytessent = 0
+            while bytessent < fsize:
+                data = f.read(BUFFER_SIZE)
+                sock.send(data)
+                bytessent += len(data)
+
+            f.close()
+            print("Sent Successfully!")
+
 
 def masterlist_as_json():
     global masterlist
@@ -180,7 +157,11 @@ def masterlist_as_json():
 def host_add_file(path, name, node):
     global masterlist
     global sock_list
-
+    
+    head, tail = os.path.split(path)
+    masterlist.append(file.File(name))
+    shutil.move(path, os.path.join(f.get_working_directory(), tail) ) # adds it to share folder
+    
     for sock in sock_list:
         truepath = path
         fsize = os.path.getsize(truepath)
@@ -193,14 +174,14 @@ def host_add_file(path, name, node):
         # Only send the file if the client wants it
         if resp == "OK":
             print("They want it.")
-            with open(truepath, 'rb') as f:
+            with open(truepath, 'rb') as k:
                 bytessent = 0
                 while bytessent < fsize:
-                    data = f.read(BUFFER_SIZE)
+                    data = k.read(BUFFER_SIZE)
                     sock.send(data)
                     bytessent += len(data)
 
-                f.close()
+                k.close()
                 print("Sent Successfully!")
         else:
             print("They don't want it...")
@@ -301,7 +282,63 @@ def new_connection(name, n, sock):
                 f.write(newdata)
             print("File received!")
 
+def pop(msg = 'Something went wrong'):
+    sg.popup('Error:', msg)
 
+
+def host_console(name, n):
+    sg.theme('Default1')
+
+    layout = [
+         [sg.Listbox(f.get_file_names(), size=(50, 10), key='list')],
+         [sg.Button('Add File'),
+          sg.Button('Update File'),
+          sg.Button('Delete File'),
+          sg.Button('Disconnect')]
+    
+    ]
+
+    hel = sg.Window('Pee2pee', layout)
+    while True:
+
+        event, values = hel.read(timeout=3000)
+        
+        if event is None:
+            break
+        
+        if event =='Add File':
+            filepath = sg.popup_get_file('File to add')
+            host_add_file(filepath, os.path.basename(filepath), n)
+                
+        if event =='Update File':
+            filename = values['list'][0]
+            if filename != '' and filename != None:
+                host_update_file(filename)
+            else:
+                pop("Make you have selected a file to update")
+                
+        if event =='Delete File':
+            filename = values['list'][0]
+            if filename != '' and filename != None:
+                host_delete_file(filename)
+            else:
+                pop("Make you have selected a file to delete")
+                
+        if event == 'Disconnect':
+            # delete connection
+            host_close_connection()
+            hel.close()
+            window()
+        
+        
+        hel['list'].update(f.get_file_names())
+    
+    
+    
+def host_close_connection():
+    global sock_list
+    for sock in sock_list:
+        sock.close()
 ################################################################################
 
 
@@ -315,8 +352,9 @@ def client_node(n):
     t = threading.Thread(target=client_listen, args=("client_listener", s, n))
     t.start()
 
-    host_menu()
-
+    client_console(s, n)
+    
+    """
     while n.nodeOpen:
 
         inp = input("")
@@ -355,7 +393,7 @@ def client_node(n):
 
                 f.close()
                 print("Sent Successfully!")
-
+                """
 
 def client_listen(name, s, node):
     ##client listening for the host
@@ -367,16 +405,33 @@ def client_listen(name, s, node):
             data = ""
 
         # TODO fix CCLEN and other identifier issues
+        """
         if data[:3] == "MAS":  # if the message is just the masterlist, pass it to client
             client_scan(data, s)
+        """
         if data[:3] == "ADD":  # if the message is a new file to add - download to the share folder
             client_download_file(s, node, data)
-        if False:  # if the message is an updated file - overwrite the local file with the same name
-            print("todo")
-        if False:  # if the message is a delete request - delete the file with that name
-            print("todo")
+        if data[:3] == "UPD":  # if the message is a new file to add - download to the share folder
+            client_update_file_from_host(s, node, data)
+        if data[:3] == "DEL":  # if the message is a new file to add - download to the share folder
+            client_delete_file_from_host(s, node, data)
 
+def client_delete_file_from_host(s, node, data):
+    fname = data[node.CCLEN:data.find(node.ETX)]
+    currfiles = node.get_file_list()
+    if fname not in currfiles:
+        
+        print("do nothing pretty much")
+    else:
+        
+        time.sleep(0.1)
+        print("Deleting file named: %s " % (fname ))
+        try:
+            os.remove(f.get_filepath(fname))
+        except:
+            print("something went wrong. shouldnt be possible")
 
+"""    
 def client_scan(masterlst, s):
     global masterlist
     s.send("OK".encode('utf-8'))
@@ -408,34 +463,72 @@ def client_scan(masterlst, s):
             client_add_file(n.path, s)
             # master is missing a file
             # send file to all
+            """
+
+def client_delete_file(sock, filename):
+    try:
+        os.remove(f.get_filepath(filename)) #removes it locally 
+    except:
+        print("File could not be deleted. shouldnt be possible")
+        
+    message = node.DEL + filename 
+    print("Sending: " + message)
+    sock.send(message.encode('utf-8'))
+    time.sleep(0.01)    
+    print("Sent Successfully!")
 
 
-def client_delete_file():
-    sg.theme('Default1')
-    layout = [
-        [sg.Listbox(f.get_file_names(), size=(50, 10), key='list')],
-        sg.Button('Delete File')
-    ]
-    hel = sg.Window('Pee2pee', layout)
-    while True:
-        event, values = hel.read()
-        if event is None:
-            break
-        if event == 'Delete File':
-            filename = values['list'][0]
-            print("Deleting", filename)
-            if filename != '' and filename != None:
-                try:
-                    # Toto send message to the host to delete the file
+def client_update_file(sock, name):
+    truepath = f.get_filepath(name)
+    fsize = os.path.getsize(truepath)
+    message = node.UPD + name + node.ETX + str(fsize) + node.EOT
+    print("Sending: " + message)
+    sock.send(message.encode('utf-8'))
+    time.sleep(0.01)    
+    with open(truepath, 'rb') as k:
+        bytessent = 0
+        while bytessent < fsize:
+            data = k.read(BUFFER_SIZE)
+            sock.send(data)
+            bytessent += len(data)
 
-                    os.remove(f.get_filepath(filename))  # removes it locally
-                except:
-                    print("File could not be deleted.")
+        k.close() 
+        print("Sent Successfully!")
 
 
-def client_update_file(path):
-    print("todo: send update request to the host")
+def client_update_file_from_host(s, node, data):
+    fsize = int(data[data.find(node.ETX) + len(node.ETX):data.find(node.EOT)])
+    fname = data[node.CCLEN:data.find(node.ETX)]
 
+    currfiles = node.get_file_list()
+    if fname not in currfiles:
+        
+        time.sleep(0.1)
+        print("Upping file named: %s and of size: %d " % (fname, fsize))
+        truepath = node.fp + fname
+        f = open(truepath, 'wb')
+        bytesrecv = 0
+        while bytesrecv < fsize:
+            newdata = s.recv(BUFFER_SIZE)
+            bytesrecv += len(newdata)
+            f.write(newdata)
+        print("File upped!")
+    else:
+        
+        time.sleep(0.1)
+        print("Upping file named: %s and of size: %d " % (fname, fsize))
+        try:
+            os.remove(f.get_filepath(fname))
+        except:
+            print("something went wrong. shouldnt be possible")
+        truepath = node.fp + fname
+        f = open(truepath, 'wb')
+        bytesrecv = 0
+        while bytesrecv < fsize:
+            newdata = s.recv(BUFFER_SIZE)
+            bytesrecv += len(newdata)
+            f.write(newdata)
+        print("File upped!")
 
 def client_download_file(s, node, data):
     fsize = int(data[data.find(node.ETX) + len(node.ETX):data.find(node.EOT)])
@@ -459,9 +552,82 @@ def client_download_file(s, node, data):
         s.send("NO".encode('utf-8'))
 
 
-def client_add_file(path,name,node):
-    print("send file to host")
+def client_add_file(sock, path, name, node):
+    head, tail = os.path.split(path)
+    try:
+        shutil.move(path,   os.path.join(f.get_working_directory(), tail) ) # adds it to share folder
+    except:
+        print("Something went wrong dd4r")
+        
+    truepath = path
+    fsize = os.path.getsize(truepath)
+    message = node.ADD + name + node.ETX + str(fsize) + node.EOT
+    print("Sending: " + message)
+    sock.send(message.encode('utf-8'))
+    time.sleep(0.01)
+    resp = sock.recv(1024).decode('utf-8')
 
+    # Only send the file if the client wants it
+    if resp == "OK":
+        print("They want it.")
+        with open(truepath, 'rb') as k:
+            bytessent = 0
+            while bytessent < fsize:
+                data = k.read(BUFFER_SIZE)
+                sock.send(data)
+                bytessent += len(data)
+
+            k.close()
+            print("Sent Successfully!")
+    else:
+        print("They don't want it...")
+
+
+
+def client_console(s, n):
+    sg.theme('Default1')
+
+    layout = [
+         [sg.Listbox(f.get_file_names(), size=(50, 10), key='list')],
+         [sg.Button('Add File'),
+          sg.Button('Update File'),
+          sg.Button('Delete File'),
+          sg.Button('Disconnect')]
+    
+    ]
+    hel = sg.Window('Pee2pee', layout)
+    while True:
+
+        event, values = hel.read(timeout=3000)
+        
+        if event is None:
+            break
+        
+        if event =='Add File':
+            filename = sg.popup_get_file('File to add')
+            client_add_file(s, f.get_filepath(filename), filename, n)
+                
+        if event =='Update File':
+            filename = values['list'][0]
+            if filename != '' and filename != None:
+                host_update_file(s, filename)
+            else:
+                pop("Make you have selected a file to update")
+                
+        if event =='Delete File':
+            filename = values['list'][0]
+            if filename != '' and filename != None:
+                host_delete_file(s, filename)
+            else:
+                pop("Make you have selected a file to delete")
+                
+        if event == 'Disconnect':
+            # delete connection
+            s.close()
+            hel.close()
+            sys.exit()
+        
+        hel['list'].update(f.get_file_names())
 #############################################################################
 
 
@@ -472,17 +638,50 @@ def check():
         os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share'))
     if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp')):
         os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp'))
+        
+        
+def window():
+    sg.theme('Default1')
 
+    layout = [
+        [sg.Text('Host IP:'), sg.InputText(key='ip', size=(30, 1))],
+        [sg.Button('Connect to host')],
+        [sg.Button('Host new connection')],
+
+    ]
+
+    window = sg.Window('Pee2pee', layout)
+    while True:
+
+        event, values = window.read()
+
+        if event is None:
+            break
+
+        if event == 'Connect to Host':
+            try:
+                name = "User: " + str(uuid.uuid4())
+                n = node(name, 8000, values['ip'], PORT)
+                window.close()
+                client_node(n)
+            except Exception as e:
+                pop("Could not connect to host: " + e)
+                window()
+            
+        if event == 'Host new connection':
+            try:
+                name = "User: " + str(uuid.uuid4())
+                n = node(name, 8000, values['ip'], PORT)
+                window.close()
+                server_node(name, n)
+            except Exception as e:
+                pop("Could not host new connection: " + str(e))
+                window()
+
+   
 def main():
     check()
-    name = "User: " + str(uuid.uuid4())
-    n = node(name, 8000, HOST, PORT)
-
-    while n.nodeOpen:
-        try:
-            client_node(n)
-        except Exception:
-            server_node(name, n)
+    window()
 
 
 
