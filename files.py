@@ -25,7 +25,7 @@ def write_default_config():
         
 def get_working_directory():
     config = get_config()
-    return config['config']['working directory']
+    return os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share')
 
 def set_working_directory(path):
     config = get_config()

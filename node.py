@@ -14,7 +14,7 @@ import PySimpleGUI as sg
 import json
 import shutil
 
-HOST = '192.168.2.151'
+HOST = '192.168.1.242'
 PORT = 8000
 BUFFER_SIZE = 1024
 ENCODING = 'utf-8'
@@ -580,6 +580,7 @@ def client_console(s, n):
         event, values = hel.read(timeout=3000)
 
         if event is None:
+            sys.exit()
             break
 
         if event == 'Add File':
@@ -609,7 +610,7 @@ def client_console(s, n):
             client_close_connection(s)
             n.nodeOpen = False
             hel.close()
-            login_window()
+            sys.exit() 
 
         hel['list'].update(files.get_file_names())
 
@@ -637,7 +638,7 @@ def login_window():
     sg.theme('Default1')
 
     layout = [
-        [sg.Text('Host IP:'), sg.InputText("192.168.2.151", key='ip', size=(30, 1))], #TODO get rid of the default text
+        [sg.Text('Host IP:'), sg.InputText("192.168.1.242", key='ip', size=(30, 1))], #TODO get rid of the default text
         [sg.Text('Host Port:'), sg.InputText("8000", key='port', size=(20, 1))],
         [sg.Button('Connect to host')],
         [sg.Button('Host new connection')],
