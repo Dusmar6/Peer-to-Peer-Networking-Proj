@@ -132,7 +132,39 @@ def masterlist_as_json():
         j["masterlist"].append({"name": file.name, "mod": file.mod,  "path": file.path})
     return json.dumps(j)
 
-def host_send_file(path, name):
+def host_send_file(path, name, sock ):
+
+    truepath = files.get_working_directory() + "/" + name
+    fsize = os.path.getsize(truepath)
+    message = ADD + name + ETX + str(fsize) + EOT
+    print("Sending: " + message)
+    resp = ''
+    try:
+        sock.send(message.encode('utf-8'))
+        time.sleep(0.01)
+        resp = sock.recv(1024).decode('utf-8')
+    except socket.timeout:
+        print("Timed out in host_send_file")
+    except Exception as e:
+        print("Connection invalid: " + str(e))
+        sock.close()
+
+    # Only send the file if the client wants it
+    if resp == "OK":
+        print("They want it.")
+        with open(truepath, 'rb') as k:
+            bytessent = 0
+            while bytessent < fsize:
+                data = k.read(BUFFER_SIZE)
+                sock.send(data)
+                bytessent += len(data)
+
+            k.close()
+            print("Sent Successfully!")
+    else:
+        print("They don't want it...")
+
+def host_send_file_to_sock_list(path, name):
     global masterlist
     global sock_list
 
@@ -146,8 +178,10 @@ def host_send_file(path, name):
             sock.send(message.encode('utf-8'))
             time.sleep(0.01)
             resp = sock.recv(1024).decode('utf-8')
-        except:
-            print("Connection invalid")
+        except socket.timeout:
+            print("Timed out in host_send_file")
+        except Exception as e:
+            print("Connection invalid: " + str(e))
             sock.close()
 
         # Only send the file if the client wants it
@@ -212,7 +246,7 @@ def host_send_all_files(sock):
     if resp == "OK":
         myfiles = files.scan()
         for file in myfiles:
-            host_send_file(files.get_working_directory(), file.name)
+            host_send_file(files.get_working_directory(), file.name, sock)
             time.sleep(0.1)
     else:
         print("Didn't send Master List")
@@ -264,10 +298,14 @@ def host_listen(name, n, sock):
         data = ''
         try:
             data = sock.recv(BUFFER_SIZE).decode('utf-8')
-        except:
-            print("Timed out")
-        # print(data)
-        # time.sleep(5)
+
+        except socket.timeout:
+            print("Timed out in host_listen: %s" % name)
+        except Exception as e:
+            print(str(e))
+            sock.close()
+            sockopen = False
+
         #TODO
         #each client can send one of the following to the host
         #new file - host downloads the file, host adds it to the masterlist, host sends the file to all other nodes (not back to the sender tho)
@@ -627,7 +665,7 @@ def login_window():
     sg.theme('Default1')
 
     layout = [
-        [sg.Text('Host IP:'), sg.InputText("192.168.1.242", key='ip', size=(30, 1))], #TODO get rid of the default text
+        [sg.Text('Host IP:'), sg.InputText("192.168.2.151", key='ip', size=(30, 1))], #TODO get rid of the default text
         [sg.Text('Host Port:'), sg.InputText("8000", key='port', size=(20, 1))],
         [sg.Button('Connect to host')],
         [sg.Button('Host new connection')],
@@ -652,7 +690,6 @@ def login_window():
             except Exception as e:
                 pop("Could not connect to host: " + str(e))
                 login_window()
-
 
         if event == 'Host new connection':
             try:
