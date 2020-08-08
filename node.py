@@ -392,7 +392,7 @@ def client_clear_folder():
     
     
     myfiles = files.scan()
-    if len(myfiles >0):
+    if len(myfiles)>0:
         for file in myfiles:
             fname = file.name
     
