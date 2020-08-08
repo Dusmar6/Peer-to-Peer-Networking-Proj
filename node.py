@@ -649,6 +649,7 @@ def login_window():
         event, values = window.read()
 
         if event is None:
+            sys.exit()
             break
 
         if event == 'Connect to host':
