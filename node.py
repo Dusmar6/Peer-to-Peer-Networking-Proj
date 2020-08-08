@@ -389,19 +389,21 @@ def client_listen(name, s, node):
             pass
 
 def client_clear_folder():
+    
+    
     myfiles = files.scan()
-
-    for file in myfiles:
-        fname = file.name
-
-        try:
-            os.remove(files.get_filepath(fname))  # removes it locally
-            for file in masterlist:
-                if file.name == fname:
-                    masterlist.remove(file)
-            print("File removed")
-        except:
-            print("File could not be deleted. shouldnt be possible")
+    if len(myfiles >0):
+        for file in myfiles:
+            fname = file.name
+    
+            try:
+                os.remove(files.get_filepath(fname))  # removes it locally
+                for file in masterlist:
+                    if file.name == fname:
+                        masterlist.remove(file)
+                print("File removed")
+            except:
+                print("File could not be deleted. shouldnt be possible")
 
 def client_delete_file_from_host(s, node, data):
     fname = data[CCLEN:data.find(EOT)]
