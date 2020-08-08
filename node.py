@@ -30,6 +30,7 @@ ADD = "ADD"  # send add + file name + filesize + file data
 UPD = "UPD"  # send udp + file name + filesize + file data (overwrite the file with this name)
 MAS = "MAS"  # send MAS + masterlist
 DIS = "DIS"  # send DIS to all connected sockets
+CHK = "CHK"
 CCLEN = len(DEL)
 
 class node():
@@ -242,7 +243,15 @@ def host_send_all_files(sock):
     command = "MAS"
     sock.send(command.encode('utf-8'))
     time.sleep(0.1)
-    resp = sock.recv(BUFFER_SIZE).decode('utf-8')
+    resp = ''
+    try:
+        resp = sock.recv(BUFFER_SIZE).decode('utf-8')
+    except socket.timeout:
+        print("Timed out sending all files")
+    except Exception as e:
+        print("Exception: host_send_all_files: " + str(e))
+        sock.close()
+
     if resp == "OK":
         myfiles = files.scan()
         for file in myfiles:
@@ -254,6 +263,23 @@ def host_send_all_files(sock):
 
 def host_scan(sock):
     global masterlist
+
+    message = CHK + EOT
+    try:
+        sock.send(message.encode(ENCODING))
+    except Exception as e:
+        print("Exception in host_scan: " + str(e))
+        print("Closing socket")
+        sock.close()
+
+    try:
+        resp = sock.recv(BUFFER_SIZE).decode(ENCODING)
+    except Exception as e:
+        print("Exception in host_scan: " + str(e))
+        print("Closing socket")
+        sock.close()
+
+
 
     # myfiles = files.scan()
     # for n in myfiles:
@@ -298,7 +324,6 @@ def host_listen(name, n, sock):
         data = ''
         try:
             data = sock.recv(BUFFER_SIZE).decode('utf-8')
-
         except socket.timeout:
             print("Timed out in host_listen: %s" % name)
         except Exception as e:
@@ -414,17 +439,19 @@ def client_listen(name, s, node):
             data = ""
 
         # TODO fix CCLEN and other identifier issues
-        if data[:CCLEN] == "MAS":  # if the message is just the masterlist, pass it to client
+        if data[:CCLEN] == MAS:  # if the message is just the masterlist, pass it to client
             s.send("OK".encode(ENCODING))
-        if data[:CCLEN] == "ADD":  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == ADD:  # if the message is a new file to add - download to the share folder
             client_download_file(s, node, data)
-        if data[:CCLEN] == "UPD":  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == UPD:  # if the message is a new file to add - download to the share folder
             client_update_file_from_host(s, node, data)
-        if data[:CCLEN] == "DEL":  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == DEL:  # if the message is a new file to add - download to the share folder
             client_delete_file_from_host(s, node, data)
-        if data[:CCLEN] == "DIS":  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == DIS:  # if the message is a new file to add - download to the share folder
             # TODO Function to make a new host out of one of the nodes maybe
             pass
+        if data[:CCLEN] == CHK:
+            s.send("OK".encode(ENCODING))
 
 def client_clear_folder():
     shutil.rmtree(files.get_working_directory()) 
@@ -687,6 +714,8 @@ def login_window():
                 n = node(name, 8000, values['ip'], int(values['port']))
                 window.close()
                 client_node(n)
+            except SystemExit:
+                sys.exit()
             except Exception as e:
                 pop("Could not connect to host: " + str(e))
                 login_window()
