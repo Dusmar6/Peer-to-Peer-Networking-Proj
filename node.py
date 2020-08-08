@@ -74,8 +74,7 @@ def host_node(name, n):
 
     # k = threading.Thread(target=host_scan, args=(s, n))
     # k.start()
-    
-    
+
     host_console(name, n)
 
 
@@ -259,6 +258,7 @@ def host_accept(s, n):
 def host_listen(name, n, sock):
 
     sockopen = True
+
     while sockopen:
         host_scan(sock)
         data = ''
@@ -660,7 +660,8 @@ def login_window():
                 client_node(n)
             except Exception as e:
                 pop("Could not connect to host: " + str(e))
-                window()
+                login_window()
+
 
         if event == 'Host new connection':
             try:
@@ -670,7 +671,8 @@ def login_window():
                 host_node(name, n)
             except Exception as e:
                 pop("Could not host new connection: " + str(e))
-                window()
+                login_window()
+
 
 
 def main():
