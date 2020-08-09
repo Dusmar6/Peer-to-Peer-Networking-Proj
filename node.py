@@ -14,6 +14,11 @@ import PySimpleGUI as sg
 import json
 import shutil
 import errno
+import logo
+import base64
+
+logo = base64.b64decode(logo.logo)
+
 
 HOST = '192.168.2.151'
 PORT = 8000
@@ -356,7 +361,7 @@ def host_console(name, n):
          sg.Button('Disconnect')]
     ]
 
-    hel = sg.Window('Pee2pee', layout)
+    hel = sg.Window('DoggyDoor', layout, icon = logo)
     while True:
 
         event, values = hel.read(timeout=3000)
@@ -424,14 +429,14 @@ def host_close_connection():
 ################################################################################
 
 
-def client_node(n):
+def client_node(n): # creates the client socket and connects, then returns the socket
     s = socket.socket()
     s.connect((n.host, n.port))
     print("Connected to %s" % str(s.getpeername()))
     return s
 
 
-def client_listen(name, sock, n):
+def client_listen(name, sock, n): # the listener-thread, which receives messages from the host and calls the correct function.
     ##client listening for the host
     ##each client can recv one of the following from the host
     while True:
@@ -442,31 +447,31 @@ def client_listen(name, sock, n):
         if data:
             print(data)
 
-        if data[:CCLEN] == MAS:  # if the message is just the masterlist, pass it to client
+        if data[:CCLEN] == MAS: 
             sock.send("OK".encode(ENCODING))
-        if data[:CCLEN] == ADD:  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == ADD:  # adds a new file
             client_download_file(sock, n, data)
-        if data[:CCLEN] == UPD:  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == UPD:  # updates a file
             client_update_file_from_host(sock, n, data)
-        if data[:CCLEN] == DEL:  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == DEL:  # deletes a file
             client_delete_file_from_host(sock, n, data)
-        if data[:CCLEN] == DIS:  # if the message is a new file to add - download to the share folder
+        if data[:CCLEN] == DIS:  # disconnects the client
             print("Socket closing with host")
             sock.close()
             break
 
 
-def client_clear_folder():
+def client_clear_folder(): #clears the folder on first connect
     shutil.rmtree(files.get_working_directory())
     check()
 
 
-def client_delete_file_from_host(s, n, data):
+def client_delete_file_from_host(s, n, data): # the logic for deleting a file that the host wants the client to delete
     fname = data[CCLEN:data.find(EOT)]
     print("Request to delete %s" % fname)
     currfiles = n.get_file_list()
 
-    if fname not in currfiles:
+    if fname not in currfiles: #if they dont have the file, for some reason. never ran into this tho
         print("do nothing pretty much")
     else:
         time.sleep(0.1)
@@ -477,7 +482,7 @@ def client_delete_file_from_host(s, n, data):
             print("Error in client_delete_file_from_host: %s" % str(e))
 
 
-def client_delete_file(sock, filename):
+def client_delete_file(sock, filename): #the logic for when the client deletes a file and asks the host to delete it for everyone else too
     try:
         os.remove(files.get_filepath(filename))  # removes it locally
     except Exception as e:
@@ -490,7 +495,7 @@ def client_delete_file(sock, filename):
     print("Sent Successfully!")
 
 
-def client_update_file(sock, name):
+def client_update_file(sock, name): # logic for client updating a file and sending it out
     truepath = files.get_filepath(name)
     fsize = os.path.getsize(truepath)
     message = UPD + name + ETX + str(fsize) + EOT
@@ -508,11 +513,11 @@ def client_update_file(sock, name):
         print("Sent Successfully!")
 
 
-def client_update_file_from_host(sock, n, data):
+def client_update_file_from_host(sock, n, data): # logic for client receiving an update request from the host
     fsize = int(data[data.find(ETX) + len(ETX):data.find(EOT)])
     fname = data[CCLEN:data.find(ETX)]
 
-    currfiles = n.get_file_list()
+    currfiles = n.get_file_list() #deletes the current version
     if fname in currfiles:
         try:
             os.remove(n.fp + fname)
@@ -531,15 +536,10 @@ def client_update_file_from_host(sock, n, data):
     print("File upped!")
 
 
-def client_download_file(sock, n, data):
+def client_download_file(sock, n, data): #receiving an add request from the host
     fsize = int(data[data.find(ETX) + len(ETX):data.find(EOT)])
     fname = data[CCLEN:data.find(ETX)]
 
-    # currfiles = n.get_file_list()
-    # if fname not in currfiles:
-        # resp = "OK".encode(ENCODING)
-        # sock.send(resp)
-        # time.sleep(0.1)
     print("Receiving file named: %s and of size: %d " % (fname, fsize))
     truepath = n.fp + fname
     f = open(truepath, 'wb')
@@ -554,7 +554,7 @@ def client_download_file(sock, n, data):
     #     pass
 
 
-def client_add_file(sock, path, name):
+def client_add_file(sock, path, name): #client adding a file and sending it to the host
     head, tail = os.path.split(path)
     try:
         shutil.move(path, os.path.join(files.get_working_directory(), tail))  # adds it to share folder
@@ -568,9 +568,7 @@ def client_add_file(sock, path, name):
     sock.send(message.encode(ENCODING))
     # time.sleep(0.1)
     # resp = sock.recv(BUFFER_SIZE).decode(ENCODING)
-    #
-    # # Only send the file if the client wants it
-    # if resp == "OK":
+    
     print("They want it.")
     with open(truepath, 'rb') as k:
         bytessent = 0
@@ -585,7 +583,7 @@ def client_add_file(sock, path, name):
     #     print("They don't want it...")
 
 
-def client_console(s, n):
+def client_console(s, n): #the main driver for client actions
     sg.theme('Default1')
 
     layout = [
@@ -598,7 +596,7 @@ def client_console(s, n):
          ]
 
     ]
-    hel = sg.Window('Pee2pee', layout)
+    hel = sg.Window('DoggyDoor', layout, icon = logo)
     while True:
 
         event, values = hel.read(timeout=3000)
@@ -607,7 +605,7 @@ def client_console(s, n):
         if event is None:
             break
 
-        if event == 'Add File':
+        if event == 'Add File': #logic for adding a file
             filepath = sg.popup_get_file('File to add')
             print(filepath)
             if filepath:
@@ -620,7 +618,7 @@ def client_console(s, n):
                         s.close()
                         break
 
-        if event == 'Update File':
+        if event == 'Update File': #logic for updating a file
             filename = ''
             try:
                 filename = values['list'][0]  # Throws an exception when nothing is selected, catch it here
@@ -635,7 +633,7 @@ def client_console(s, n):
                         s.close()
                         break
 
-        if event == 'Delete File':
+        if event == 'Delete File': #logic for deleting a file
             filename = ''
             try:
                 filename = values['list'][0]  # Throws an exception when nothing is selected, catch it here
@@ -650,7 +648,7 @@ def client_console(s, n):
                         s.close()
                         break
 
-        if event == 'Open File':
+        if event == 'Open File': #logic for opening a file
             filename = ''
             try:
                 filename = values['list'][0]  # Throws an exception when nothing is selected, catch it here
@@ -659,11 +657,11 @@ def client_console(s, n):
 
             os.startfile(files.get_filepath(filename))
 
-        if event == 'Disconnect':
+        if event == 'Disconnect': #logic for disconnecting from the host
             # delete connection
-            message = DIS + EOT
+            message = DIS + EOT 
             try:
-                s.send(message.encode(ENCODING))
+                s.send(message.encode(ENCODING)) #sends a message that its disconnecting
             except Exception as e:
                 print("Error in client_console: %s" % str(e))
             finally:
@@ -677,7 +675,7 @@ def client_console(s, n):
 #############################################################################
 
 
-def check():
+def check(): #ensures that the proper files exist
     if not os.path.isdir(files.get_working_directory()):
         os.mkdir(files.get_working_directory())
     if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share')):
@@ -686,7 +684,7 @@ def check():
         os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp'))
 
 
-def login_window():
+def login_window(): #the main login window
     sg.theme('Default1')
 
     layout = [
@@ -696,7 +694,7 @@ def login_window():
         [sg.Button('Host new connection')],
     ]
 
-    window = sg.Window('Pee2pee', layout)
+    window = sg.Window('DoggyDoor', layout, icon = logo)
     while True:
 
         try:
@@ -708,7 +706,7 @@ def login_window():
         if event is None:
             break
 
-        if event == 'Connect to host':
+        if event == 'Connect to host': #become a client
             conn = None
             try:
                 name = "User: " + str(uuid.uuid4())
@@ -732,7 +730,7 @@ def login_window():
 
                 client_console(conn, n)
 
-        if event == 'Host new connection':
+        if event == 'Host new connection': #become a host
             try:
                 name = "User: " + str(uuid.uuid4())
                 n = Node(name, 8000, values['ip'], int(values['port']))
@@ -748,7 +746,7 @@ def login_window():
 def main():
     check()
     login_window()
-    os._exit(0)
+    os._exit(0) #end program
 
 
 if __name__ == '__main__':
