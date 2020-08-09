@@ -29,6 +29,7 @@ DEL = "DEL"  # send del + file name
 ADD = "ADD"  # send add + file name + filesize + file data
 UPD = "UPD"  # send udp + file name + filesize + file data (overwrite the file with this name)
 MAS = "MAS"  # send MAS + masterlist
+DIS = "DIS" # send DIS + disconnect from server
 CCLEN = len(DEL)
 
 
@@ -92,6 +93,7 @@ class node():
 def host_node(name, n):
     s = socket.socket()
     host = n.get_my_ip()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.bind((host, n.port))
     s.listen(5)
     print("Started Server at: (%s:%d)" % (host, n.port))
@@ -371,13 +373,17 @@ def host_accept(s, n):
 def host_listen(name, n, sock):
     global sock_list
 
-    while True:
-        # host_scan(sock)
-        time.sleep(5)
+    sockopen = True
+    while sockopen:
+        data = ''
         try:
             data = sock.recv(BUFFER_SIZE).decode(ENCODING)
         except socket.timeout:
             print("Time out in host_listen with: %s" % str(sock.getpeername()))
+        except Exception as e:
+            print("Error in host_listen: %s" % str(e))
+            sockopen = False
+            sock.close()
         print(data)
 
         # each client can send one of the following to the host
@@ -391,6 +397,9 @@ def host_listen(name, n, sock):
             host_delete_file_from_client(sock, n, data)
         if data[:CCLEN] == UPD:
             host_update_file_from_client(sock, n, data)
+        if data[:CCLEN] == DIS:
+            sock.close()
+            sockopen = False
 
         # if data[:n.CCLEN] == n.IDENTIFIER:
         #     cID = data[n.CCLEN:data.find(ETX)]
@@ -438,11 +447,14 @@ def host_console(name, n):
         event, values = hel.read(timeout=3000)
 
         if event is None:
-            break
+            sys.exit()
 
         if event == 'Add File':
             filepath = sg.popup_get_file('File to add')
-            host_add_file(filepath, os.path.basename(filepath))
+            print(filepath)
+            if filepath:
+                head, filename = os.path.split(filepath)
+                host_add_file(filepath, os.path.basename(filepath))
 
         if event == 'Update File':
             filename = ''
@@ -492,6 +504,7 @@ def host_close_connection():
 
 def client_node(n):
     s = socket.socket()
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.connect((n.host, n.port))
     identity = "User: " + n.name
     s.send(identity.encode(ENCODING))
@@ -746,7 +759,6 @@ def client_console(s, n):
 
         if event is None:
             sys.exit()
-            break
 
         if event == 'Add File':
             filepath = sg.popup_get_file('File to add')
@@ -784,6 +796,8 @@ def client_console(s, n):
 
         if event == 'Disconnect':
             # delete connection
+            message = DIS + EOT
+            s.send(message.encode(ENCODING))
             s.close()
             hel.close()
             sys.exit()
@@ -799,8 +813,7 @@ def check():
         os.mkdir(files.get_working_directory())
     if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share')):
         os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'share'))
-    if not os.path.isdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp')):
-        os.mkdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'temp'))
+
 
 
 def login_window():
