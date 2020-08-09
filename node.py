@@ -270,20 +270,22 @@ def host_delete_file_from_client(sock, n, data):
         time.sleep(0.01)
         print("Sent Successfully!")
 
+
 def host_update_file_from_client(sock, n, data):
 
     fsize = int(data[data.find(ETX) + len(ETX):data.find(EOT)])
     fname = data[CCLEN:data.find(ETX)]
+    truepath = n.fp + fname
 
     # First delete the old file from your directory
     try:
         os.remove(files.get_filepath(fname))  # removes it locally
-        for file in masterlist:
-            if file.name == fname:
-                masterlist.remove(file)
+        for item in masterlist:
+            if item.name == fname:
+                masterlist.remove(item)
         print("File removed")
-    except:
-        print("File could not be deleted. shouldnt be possible")
+    except Exception as e:
+        print("Error in host_update_file_from_client: %s" % str(e))
 
     # Next, download the updated file into your directory
     currfiles = n.get_file_list()
@@ -292,7 +294,6 @@ def host_update_file_from_client(sock, n, data):
         # sock.send(resp)
         # time.sleep(0.1)
         # print("Receiving file named: %s and of size: %d " % (fname, fsize))
-        truepath = n.fp + fname
         f = open(truepath, 'wb')
         bytesrecv = 0
         while bytesrecv < fsize:
@@ -305,38 +306,12 @@ def host_update_file_from_client(sock, n, data):
         pass
 
     # Tell other nodes to delete the file
-    for sock in sock_list:
-        message = DEL + fname + EOT
-        print("Sending: " + message)
-        sock.send(message.encode(ENCODING))
-        time.sleep(0.01)
-        print("Sent Successfully!")
+    host_delete_file(fname)
+
+    time.sleep(1)
 
     # Send the updated file to all the connections
-    for sock in sock_list:
-        truepath = files.get_working_directory() + "/" + fname
-        print(truepath)
-        fsize = os.path.getsize(truepath)
-        message = ADD + fname + ETX + str(fsize) + EOT
-        print("Sending: " + message)
-        sock.send(message.encode(ENCODING))
-        # time.sleep(0.01)
-        # resp = sock.recv(BUFFER_SIZE).decode(ENCODING)
-        #
-        # # Only send the file if the client wants it
-        # if resp == "OK":
-        print("They want it.")
-        with open(truepath, 'rb') as k:
-            bytessent = 0
-            while bytessent < fsize:
-                data = k.read(BUFFER_SIZE)
-                sock.send(data)
-                bytessent += len(data)
-
-            k.close()
-            print("Sent Successfully!")
-        # else:
-        #     print("They don't want it...")
+    host_add_file(truepath, fname)
 
 
 def host_send_all_files(sock):
@@ -453,6 +428,7 @@ def host_console(name, n):
         [sg.Button('Add File'),
          sg.Button('Update File'),
          sg.Button('Delete File'),
+         sg.Button('Open File'),
          sg.Button('Disconnect')]
     ]
 
@@ -485,6 +461,15 @@ def host_console(name, n):
                 print("Make sure you have selected a file to delete")
             if filename:
                 host_delete_file(filename)
+
+        if event == 'Open File':
+            filename = ''
+            try:
+                filename = values['list'][0]  # Throws an exception when nothing is selected, catch it here
+            except:
+                print("Make sure you have selected a file to open")
+
+            os.startfile(files.get_filepath(filename))
 
         if event == 'Disconnect':
             # delete connection
@@ -749,7 +734,9 @@ def client_console(s, n):
         [sg.Button('Add File'),
          sg.Button('Update File'),
          sg.Button('Delete File'),
-         sg.Button('Disconnect')]
+         sg.Button('Open File'),
+         sg.Button('Disconnect')
+         ]
 
     ]
     hel = sg.Window('Pee2pee', layout)
@@ -763,8 +750,10 @@ def client_console(s, n):
 
         if event == 'Add File':
             filepath = sg.popup_get_file('File to add')
-            head, filename = os.path.split(filepath)
-            client_add_file(s, filepath, filename)
+            print(filepath)
+            if filepath:
+                head, filename = os.path.split(filepath)
+                client_add_file(s, filepath, filename)
 
         if event == 'Update File':
             filename = ''
@@ -783,6 +772,15 @@ def client_console(s, n):
                 print("Make sure you have selected a file to delete")
             if filename:
                 client_delete_file(s, filename)
+
+        if event == 'Open File':
+            filename = ''
+            try:
+                filename = values['list'][0]  # Throws an exception when nothing is selected, catch it here
+            except:
+                print("Make sure you have selected a file to open")
+
+            os.startfile(files.get_filepath(filename))
 
         if event == 'Disconnect':
             # delete connection
