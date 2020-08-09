@@ -135,10 +135,10 @@ def masterlist_as_json():
 
 
 def host_send_file(path, name, sock):
-    truepath = files.get_working_directory() + "/" + name
+    truepath = os.path.join(files.get_working_directory(), name)
     fsize = os.path.getsize(truepath)
     message = ADD + name + ETX + str(fsize) + EOT
-    print("Sending: " + message)
+    print("Sending: " + message + " to " + str(sock.getpeername()))
     resp = ''
     try:
         sock.send(message.encode(ENCODING))
@@ -211,28 +211,7 @@ def host_add_file(path, name):
     shutil.move(path, os.path.join(files.get_working_directory(), tail))  # adds it to share folder
 
     for sock in sock_list:
-        truepath = files.get_working_directory() + "/" + tail
-        fsize = os.path.getsize(truepath)
-        message = ADD + name + ETX + str(fsize) + EOT
-        print("Sending: " + message)
-        sock.send(message.encode(ENCODING))
-        time.sleep(0.01)
-        resp = sock.recv(BUFFER_SIZE).decode(ENCODING)
-
-        # Only send the file if the client wants it
-        if resp == "OK":
-            print("They want it.")
-            with open(truepath, 'rb') as k:
-                bytessent = 0
-                while bytessent < fsize:
-                    data = k.read(BUFFER_SIZE)
-                    sock.send(data)
-                    bytessent += len(data)
-
-                k.close()
-                print("Sent Successfully!")
-        else:
-            print("They don't want it...")
+        host_send_file(path, name, sock)
 
 
 def host_add_request(sock, fsize, fname):
@@ -320,7 +299,7 @@ def host_listen(name, n, sock):
     sockopen = True
 
     while sockopen:
-        host_scan(sock)
+        # host_scan(sock)
         data = ''
         try:
             data = sock.recv(BUFFER_SIZE).decode(ENCODING)
@@ -372,6 +351,7 @@ def host_console(name, n):
 
         if event == 'Add File':
             filepath = sg.popup_get_file('File to add')
+            print("%s:%s" % (filepath, os.path.basename(filepath)))
             host_add_file(filepath, os.path.basename(filepath))
 
         if event == 'Update File':
