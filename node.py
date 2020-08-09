@@ -1,9 +1,6 @@
 import socket
-import sys
 import time
 import threading
-import random
-import hashlib
 import uuid
 import os
 from os import listdir
@@ -11,7 +8,6 @@ from os.path import isfile, join
 import file
 import files
 import PySimpleGUI as sg
-import json
 import shutil
 import errno
 import logo
